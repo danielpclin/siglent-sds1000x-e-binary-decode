@@ -4,6 +4,7 @@ import numpy as np
 UNITS_TABLE = ("V", "A", "VV", "AA", "OU", "W", "SQRT_V", "SQRT_A", "INTEGRAL_V", "INTEGRAL_A", "DT_V", "DT_A",
                "DT_DIV", "Hz", "S", "SA", "PTS", "NULL", "DB", "DBV", "DBA", "VPP", "VDC", "DBM")
 
+
 def magnitude_to_decimal(index: int):
     return 10 ** ((index - 8) * 3)
 
