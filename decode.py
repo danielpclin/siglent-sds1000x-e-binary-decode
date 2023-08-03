@@ -61,6 +61,9 @@ def decode(filename="SDS00001.bin"):
         ch_attenuation = struct.unpack('<4d', file.read(8 * 4))
         print(f"{ch_attenuation = }")
 
+        time = time_delay[0] - (time_div[0] * 7)
+        time_delta = 1 / sample_rate[0]
+        print("time: ", np.arange(time, time + wave_length * time_delta, time_delta))
         file.seek(0x800, 0)
         for i, on in enumerate(ch_on):
             if on:
