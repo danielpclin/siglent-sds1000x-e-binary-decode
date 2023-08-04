@@ -1,3 +1,5 @@
+import argparse
+import os
 import struct
 from zipfile import ZipFile
 
@@ -11,7 +13,8 @@ def magnitude_to_decimal(index: int):
     return 10 ** ((index - 8) * 3)
 
 
-def decode(filename="SDS00001.bin"):
+def decode(filename="SDS00001.bin", verbose=True):
+    # TODO: add verbosity logging
     with open(f"{filename}", 'rb') as file:
         ch_on = struct.unpack('<4i', file.read(4 * 4))
         print(f"{ch_on = }")
@@ -127,9 +130,20 @@ samplerate={int(sample_rate)}
 
 
 def main():
-    filename = "SDS00001"
-    analog_data, digital_data, time = decode(f"{filename}.bin")
-    save_to_sigrok_zip(analog_data, digital_data, time[2], f"{filename}.sr")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="binary file to decode")
+    parser.add_argument("-r", "--raw", help="write to raw binary file instead of sigrok zip file", action='store_true')
+    parser.add_argument("-v", "--verbose", help="print verbose logs", action='store_true')  # TODO
+    args = parser.parse_args()
+
+    analog_data, digital_data, time = decode(args.filename, verbose=args.verbose)
+    if args.raw:
+        for i, data in enumerate(analog_data):
+            if data is not None:
+                save_analog_to_file(data, f"{os.path.splitext(args.filename)[0]}-ch{i+1}.bin")
+        # TODO: write digital data
+    else:
+        save_to_sigrok_zip(analog_data, digital_data, time[2], os.path.splitext(args.filename)[0] + ".sr")
 
 
 if __name__ == "__main__":
