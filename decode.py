@@ -1,4 +1,6 @@
 import struct
+from zipfile import ZipFile
+
 import numpy as np
 
 UNITS_TABLE = ("V", "A", "VV", "AA", "OU", "W", "SQRT_V", "SQRT_A", "INTEGRAL_V", "INTEGRAL_A", "DT_V", "DT_A",
@@ -61,9 +63,11 @@ def decode(filename="SDS00001.bin"):
         ch_attenuation = struct.unpack('<4d', file.read(8 * 4))
         print(f"{ch_attenuation = }")
 
-        time = time_delay[0] - (time_div[0] * 7)
-        time_delta = 1 / sample_rate[0]
-        print("time: ", np.arange(time, time + wave_length * time_delta, time_delta))
+        time = (time_delay[0] - (time_div[0] * 7), 1 / sample_rate[0])
+        time = (time[0], time[1], sample_rate[0], np.arange(time[0], time[0] + wave_length * time[1], time[1]))
+        print(f"{time = }")
+        analog_data = []
+        digital_data = []
         file.seek(0x800, 0)
         for i, on in enumerate(ch_on):
             if on:
@@ -71,22 +75,61 @@ def decode(filename="SDS00001.bin"):
                                         dtype=np.uint8).astype(np.int16)
 
                 ch_data = ((ch_data - 128) * ch_volt_div[0][0] / 25 - ch_vert_offset[0][0]) * ch_attenuation[i]
-                ch_data.astype(np.dtype(np.float32).newbyteorder("<"))
+                ch_data = ch_data.astype(np.dtype(np.float32).newbyteorder("<"))
                 print(f"ch{i + 1} data:", ch_data)
-                with open(f"ch{i + 1}_{filename}", 'wb') as raw:
-                    raw.write(ch_data)
+                analog_data.append(ch_data)
+            else:
+                analog_data.append(None)
 
         if digital_on:
             for i, on in enumerate(d_on):
                 if on:
-                    digital_data = np.frombuffer(
+                    ch_data = np.frombuffer(
                         struct.unpack(f'<{int(digital_wave_length)}s', file.read(int(digital_wave_length)))[0],
                         dtype=np.uint8)
-                    print(f"ch{i + 1} data:", digital_data)
+                    print(f"ch{i + 1} data:", ch_data)
+                    digital_data.append(ch_data)
+                else:
+                    digital_data.append(None)
+    return analog_data, digital_data, time
+
+
+def save_analog_to_file(data: bytes | np.ndarray, filename: str = 'ch1.bin'):
+    """
+    :param data: data of analog channel to save
+    :param filename: filename to save as
+    :type data: bytes like object, with float32 little endian encoding. ex: ndarray with dtype float32
+    :type filename: str
+    """
+    with open(f"{filename}", 'wb') as analog_file:
+        analog_file.write(data)
+
+
+def save_digital_to_file(data: bytes | np.ndarray, filename: str = 'd1.bin'):
+    raise NotImplementedError()
+
+
+def save_to_sigrok_zip(analog_data: list[bytes | np.ndarray], digital_data: list[bytes | np.ndarray],
+                       sample_rate: int | float, filename: str = "decode.sr") -> None:
+    with ZipFile(filename, "w") as zipfile:
+        zipfile.writestr("version", "2")
+        zipfile.writestr("metadata",  f"""[device 1]
+total analog={len(analog_data)}
+total probes={len(digital_data)}
+samplerate={int(sample_rate)}
+""" +
+                         "\n".join(f"analog{i+1}=Ch{i + 1}" for i, v in enumerate(analog_data) if v is not None) +
+                         "\n".join(f"probe{i+1}=D{i + 1}" for i, v in enumerate(digital_data) if v is not None))
+        for i, data in enumerate(analog_data):
+            if data is not None:
+                zipfile.writestr(f"analog-1-{i+1}-1", data)
+        # TODO: write digital data to sr file
 
 
 def main():
-    decode("SDS00001.bin")
+    filename = "SDS00001"
+    analog_data, digital_data, time = decode(f"{filename}.bin")
+    save_to_sigrok_zip(analog_data, digital_data, time[2], f"{filename}.sr")
 
 
 if __name__ == "__main__":
